@@ -1,0 +1,15 @@
+{
+  "preset": "ts-jest",
+  "testEnvironment": "node",
+  "roots": ["<rootDir>/src"],
+  "testMatch": ["**/__tests__/**/*.test.ts"],
+  "moduleNameMapper": {
+    "^@dnd/shared$": "<rootDir>/../shared/src/index.ts"
+  },
+  "transform": {
+    "^.+\\.tsx?$": ["ts-jest", { "tsconfig": "tsconfig.json" }]
+  },
+  "setupFiles": ["<rootDir>/src/__tests__/setup/jestEnv.ts"],
+  "globalSetup": "<rootDir>/src/__tests__/setup/globalSetup.ts",
+  "globalTeardown": "<rootDir>/src/__tests__/setup/globalTeardown.ts"
+}

@@ -1,0 +1,77 @@
+# docker-compose.yml — LOCAL DEVELOPMENT
+#
+# Runs PostgreSQL in a container so you don't need to install it locally.
+# The server and client run on the HOST with `npm run dev` (hot-reload).
+# Only the DB is containerised here — keeps dev fast.
+#
+# Usage:
+#   docker compose up -d db      # start only the database
+#   npm run dev                  # start server + client on host
+#
+# If you prefer to run everything in Docker during dev:
+#   docker compose --profile full up
+
+name: dnd-dev
+
+services:
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: dnd_session_manager
+    ports:
+      - "5432:5432"          # expose to host so Prisma Studio works
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Server (hot-reload via ts-node-dev, profile: full) ─────────────────────
+  server:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+      target: builder          # use builder stage so source is available
+    working_dir: /app/server
+    command: npx ts-node-dev --respawn --transpile-only src/index.ts
+    volumes:
+      - ./server/src:/app/server/src   # live reload
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/dnd_session_manager
+      JWT_SECRET: dev-secret-change-in-production
+      PORT: 3001
+      CLIENT_ORIGIN: http://localhost:5173
+      NODE_ENV: development
+    ports:
+      - "3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ── Client (Vite dev server, profile: full) ─────────────────────────────────
+  client:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+      target: builder
+    working_dir: /app/client
+    command: npx vite --host 0.0.0.0
+    volumes:
+      - ./client/src:/app/client/src   # live reload
+    environment:
+      VITE_API_URL: http://localhost:3001
+    ports:
+      - "5173:5173"
+    depends_on:
+      - server
+
+volumes:
+  db_data:
