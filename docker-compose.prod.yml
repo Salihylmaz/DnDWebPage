@@ -35,6 +35,9 @@ services:
   # ── Express API Server ──────────────────────────────────────────────────────
   server:
     image: ${DOCKER_IMAGE_SERVER:-ghcr.io/salihylmaz/dnd-server}:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: server/Dockerfile
     restart: always
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
@@ -50,6 +53,9 @@ services:
   # ── Nginx + React SPA ───────────────────────────────────────────────────────
   client:
     image: ${DOCKER_IMAGE_CLIENT:-ghcr.io/salihylmaz/dnd-client}:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: client/Dockerfile
     restart: always
     expose:
       - "80"
