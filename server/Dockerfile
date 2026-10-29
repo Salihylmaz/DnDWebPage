@@ -2,6 +2,9 @@
 # We build TypeScript here so the final image contains only compiled JS.
 FROM node:22-alpine AS builder
 
+# Prisma's query engine needs OpenSSL available when generating its runtime client.
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 # Copy workspace manifests first (layer cache: deps only reinstall when package.json changes)
@@ -24,6 +27,9 @@ RUN npx tsc
 # ─── Stage 2: Runner ─────────────────────────────────────────────────────────
 # Lean production image — no devDeps, no source files.
 FROM node:22-alpine AS runner
+
+# Prisma migrate deploy runs in this stage and needs OpenSSL at runtime.
+RUN apk add --no-cache openssl
 
 WORKDIR /app
 
