@@ -1,9 +1,13 @@
+import 'express-async-errors';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
+import helmet from 'helmet';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { env } from './lib/env';
+import prisma from './lib/prisma';
+import { verifyToken, COOKIE_NAME } from './lib/jwt';
 
 // Import routers
 import authRouter from './routes/auth';
@@ -18,15 +22,18 @@ import logbookRouter from './routes/logbook';
 
 export function createApp() {
   const app = express();
+  // The app is reachable only through Caddy and Nginx in production.
+  app.set('trust proxy', 2);
 
   // ── Middleware ────────────────────────────────────────────────────────────
+  app.use(helmet());
   app.use(
     cors({
       origin: env.CLIENT_ORIGIN,
       credentials: true, // required for httpOnly cookie auth
     })
   );
-  app.use(express.json());
+  app.use(express.json({ limit: '64kb' }));
   app.use(cookieParser());
 
   // ── Health check ─────────────────────────────────────────────────────────
@@ -45,6 +52,27 @@ export function createApp() {
   app.use('/api/sessions', combatRouter);
   app.use('/api/sessions', logbookRouter);
 
+  // Do not leak database errors, stack traces, or request data to API clients.
+  app.use((error: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (res.headersSent) {
+      next(error);
+      return;
+    }
+    const status = typeof error === 'object' && error !== null && 'status' in error
+      ? Number((error as { status: unknown }).status)
+      : 500;
+    console.error('[API] Request failed:', error);
+    if (status === 400) {
+      res.status(400).json({ error: 'İstek biçimi geçersiz' });
+      return;
+    }
+    if (status === 413) {
+      res.status(413).json({ error: 'İstek boyutu çok büyük' });
+      return;
+    }
+    res.status(500).json({ error: 'Sunucu hatası' });
+  });
+
   return app;
 }
 
@@ -54,15 +82,57 @@ export function createSocketServer(httpServer: ReturnType<typeof createServer>, 
       origin: clientOrigin,
       credentials: true,
     },
+    allowRequest: (request, callback) => {
+      callback(null, request.headers.origin === clientOrigin);
+    },
+  });
+
+  io.use(async (socket, next) => {
+    try {
+      const cookieHeader = socket.handshake.headers.cookie ?? '';
+      const authCookie = cookieHeader.split(';').map((part) => part.trim())
+        .find((part) => part.startsWith(`${COOKIE_NAME}=`));
+      const token = authCookie?.slice(COOKIE_NAME.length + 1);
+      if (!token) {
+        next(new Error('unauthorized'));
+        return;
+      }
+
+      const payload = verifyToken(decodeURIComponent(token));
+      const user = await prisma.user.findUnique({ where: { id: payload.userId }, select: { id: true } });
+      if (!user) {
+        next(new Error('unauthorized'));
+        return;
+      }
+      socket.data.userId = user.id;
+      next();
+    } catch {
+      next(new Error('unauthorized'));
+    }
   });
 
   io.on('connection', (socket) => {
     console.log(`[Socket.IO] Client connected: ${socket.id}`);
 
     // Client joins a session room to receive realtime updates
-    socket.on('join-session', (sessionId: string) => {
-      socket.join(`session:${sessionId}`);
-      console.log(`[Socket.IO] ${socket.id} joined session:${sessionId}`);
+    socket.on('join-session', async (sessionId: unknown) => {
+      if (typeof sessionId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId)) {
+        return;
+      }
+      try {
+        const member = await prisma.sessionMember.findUnique({
+          where: { sessionId_userId: { sessionId, userId: socket.data.userId as string } },
+          select: { sessionId: true },
+        });
+        if (!member) {
+          socket.emit('session:join-denied');
+          return;
+        }
+        socket.join(`session:${sessionId}`);
+        console.log(`[Socket.IO] ${socket.id} joined session:${sessionId}`);
+      } catch {
+        socket.emit('session:join-denied');
+      }
     });
 
     socket.on('leave-session', (sessionId: string) => {

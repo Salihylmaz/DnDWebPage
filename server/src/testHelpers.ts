@@ -10,6 +10,7 @@
  */
 
 import request from 'supertest';
+import argon2 from 'argon2';
 import { createApp } from './app';
 import prisma from './lib/prisma';
 
@@ -21,9 +22,15 @@ export async function registerAndLogin(opts: {
   password: string;
   displayName: string;
 }): Promise<{ cookie: string; userId: string }> {
-  await request(app)
-    .post('/api/auth/register')
-    .send(opts);
+  const passwordHash = await argon2.hash(opts.password);
+  const user = await prisma.user.create({
+    data: {
+      email: opts.email,
+      passwordHash,
+      displayName: opts.displayName,
+      emailVerifiedAt: new Date(),
+    },
+  });
 
   const res = await request(app)
     .post('/api/auth/login')
@@ -32,8 +39,7 @@ export async function registerAndLogin(opts: {
 
   const rawCookie = res.headers['set-cookie'];
   const cookie = Array.isArray(rawCookie) ? rawCookie[0] : (rawCookie ?? '');
-  const user = await prisma.user.findUnique({ where: { email: opts.email } });
-  return { cookie, userId: user!.id };
+  return { cookie, userId: user.id };
 }
 
 // ── Session helpers ───────────────────────────────────────────────────────────

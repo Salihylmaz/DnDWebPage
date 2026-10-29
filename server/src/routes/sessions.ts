@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { nanoid } from 'nanoid';
 import prisma from '../lib/prisma';
 import { authenticate } from '../middleware/authenticate';
@@ -6,6 +7,13 @@ import { requireSessionMember, requireDM } from '../middleware/session';
 import { createSessionSchema, joinSessionSchema } from '../schemas/session.schema';
 
 const router = Router();
+const inviteCodeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Çok fazla davet kodu denendi. Lütfen daha sonra tekrar deneyin.' },
+});
 
 // All session routes require authentication
 router.use(authenticate);
@@ -76,7 +84,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/sessions/join — Join via invite code
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/join', async (req: Request, res: Response): Promise<void> => {
+router.post('/join', inviteCodeLimiter, async (req: Request, res: Response): Promise<void> => {
   const result = joinSessionSchema.safeParse(req.body);
   if (!result.success) {
     res.status(400).json({ error: 'Geçersiz veri', details: result.error.flatten() });

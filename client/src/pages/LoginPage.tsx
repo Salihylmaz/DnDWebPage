@@ -1,29 +1,67 @@
-import { useState, type FormEvent } from 'react';
+import { useCallback, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { GoogleSignInButton } from '../components/GoogleSignInButton';
+
+function safeReturnPath(pathname: unknown): string {
+  if (typeof pathname !== 'string' || !pathname.startsWith('/') || pathname.startsWith('//') || pathname.includes('\\')) {
+    return '/dashboard';
+  }
+  return pathname;
+}
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, googleLogin, resendVerification } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: Location })?.from?.pathname ?? '/dashboard';
+  const from = safeReturnPath((location.state as { from?: { pathname?: unknown } } | null)?.from?.pathname);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [canResendVerification, setCanResendVerification] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const handleGoogleCredential = useCallback(async (credential: string) => {
+    setError('');
+    setNotice('');
+    setLoading(true);
+    try {
+      await googleLogin(credential);
+      navigate(from, { replace: true });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Google ile giriş yapılamadı');
+    } finally {
+      setLoading(false);
+    }
+  }, [googleLogin, navigate, from]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
+    setNotice('');
+    setCanResendVerification(false);
     setLoading(true);
     try {
       await login({ email, password });
       navigate(from, { replace: true });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Bir hata oluştu');
+      setCanResendVerification((err as { status?: number })?.status === 403);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleResendVerification() {
+    setNotice('');
+    try {
+      const result = await resendVerification(email);
+      setNotice(result.message);
+      setCanResendVerification(false);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'E-posta gönderilemedi');
     }
   }
 
@@ -43,7 +81,18 @@ export default function LoginPage() {
         </div>
 
         <div className="card">
-          <h2 className="mb-6 text-lg font-semibold text-white">Giriş Yap</h2>
+          <h2 className="text-lg font-semibold text-white">Giriş Yap</h2>
+          <p className="mb-5 mt-1 text-sm text-gray-400">Macerana kaldığın yerden devam et.</p>
+
+          <GoogleSignInButton onCredential={handleGoogleCredential} disabled={loading} />
+
+          {import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+            <div className="my-5 flex items-center gap-3 text-xs text-gray-500" aria-hidden="true">
+              <span className="h-px flex-1 bg-white/10" />
+              <span>veya e-posta ile giriş yap</span>
+              <span className="h-px flex-1 bg-white/10" />
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4" id="login-form">
             <div>
@@ -82,6 +131,14 @@ export default function LoginPage() {
               <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400" role="alert">
                 {error}
               </p>
+            )}
+
+            {notice && <p className="text-sm text-emerald-300" role="status">{notice}</p>}
+
+            {canResendVerification && (
+              <button type="button" onClick={handleResendVerification} className="text-sm text-dragon-400 hover:text-dragon-300">
+                Doğrulama e-postasını yeniden gönder
+              </button>
             )}
 
             <button

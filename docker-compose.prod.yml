@@ -45,6 +45,13 @@ services:
       PORT: 3001
       CLIENT_ORIGIN: ${CLIENT_ORIGIN}
       NODE_ENV: production
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      APP_BASE_URL: ${APP_BASE_URL:-}
     depends_on:
       db:
         condition: service_healthy
@@ -56,6 +63,8 @@ services:
     build:
       context: .
       dockerfile: client/Dockerfile
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     restart: always
     expose:
       - "80"

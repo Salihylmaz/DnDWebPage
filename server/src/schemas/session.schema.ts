@@ -12,8 +12,9 @@ export const createSessionSchema = z.object({
 export const joinSessionSchema = z.object({
   inviteCode: z
     .string()
-    .min(1, 'Davet kodu gereklidir')
     .trim()
+    .length(8, 'Davet kodu geçersiz')
+    .regex(/^[A-Z0-9_-]+$/i, 'Davet kodu geçersiz')
     .toUpperCase(),
 });
 

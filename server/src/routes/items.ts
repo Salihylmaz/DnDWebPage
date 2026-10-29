@@ -34,6 +34,10 @@ router.get(
   async (req: Request, res: Response): Promise<void> => {
     const { sessionId } = req.params;
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (q.length > 100) {
+      res.status(400).json({ error: 'Arama metni en fazla 100 karakter olabilir' });
+      return;
+    }
 
     const items = await prisma.item.findMany({
       where: {

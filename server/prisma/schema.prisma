@@ -12,17 +12,32 @@ datasource db {
 
 // ─── User ─────────────────────────────────────────────────────────────────────
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String
-  displayName  String
-  createdAt    DateTime @default(now())
+  id              String                   @id @default(uuid())
+  email           String                   @unique
+  passwordHash    String?
+  displayName     String
+  googleId        String?                  @unique
+  emailVerifiedAt DateTime?
+  createdAt       DateTime                 @default(now())
 
   // Sessions where this user is the DM
   dmSessions  Session[]       @relation("DMSessions")
   // Sessions where this user is a member (DM or player)
   memberships SessionMember[]
   characters  Character[]
+  emailVerificationTokens EmailVerificationToken[]
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }
 
 // ─── Session ──────────────────────────────────────────────────────────────────

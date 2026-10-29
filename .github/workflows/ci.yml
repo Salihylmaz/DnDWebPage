@@ -2,100 +2,22 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
     branches: [main]
 
-env:
-  REGISTRY: ghcr.io
+permissions:
+  contents: read
 
 jobs:
-  # ── 1. Lint & Type-check ────────────────────────────────────────────────────
-  lint:
-    name: Lint & Type-check
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Type-check server
-        run: npx tsc --noEmit
-        working-directory: server
-
-      - name: Type-check client
-        run: npx tsc --noEmit
-        working-directory: client
-
-  # ── 2. Build & push Docker images (only on push to main/develop) ─────────────
-  build-and-push:
-    name: Build & Push Images
-    runs-on: ubuntu-latest
-    needs: lint
-    if: github.event_name == 'push'
-    permissions:
-      contents: read
-      packages: write   # needed to push to GHCR
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}  # automatically provided by GH Actions
-
-      - name: Set up Docker Buildx (enables layer caching)
-        uses: docker/setup-buildx-action@v3
-
-      # Determine image tag: "latest" on main, branch name on other branches
-      - name: Compute image tag
-        id: tag
-        run: |
-          OWNER="$(printf '%s' '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
-          echo "image_server=ghcr.io/$OWNER/dnd-server" >> "$GITHUB_OUTPUT"
-          echo "image_client=ghcr.io/$OWNER/dnd-client" >> "$GITHUB_OUTPUT"
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "tag=latest" >> $GITHUB_OUTPUT
-          else
-            SAFE=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9._-]/-/g')
-            echo "tag=$SAFE" >> $GITHUB_OUTPUT
-          fi
-
-      # ── Server image ──────────────────────────────────────────────────────
-      - name: Build & push server image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: server/Dockerfile
-          push: true
-          tags: |
-            ${{ steps.tag.outputs.image_server }}:${{ steps.tag.outputs.tag }}
-            ${{ steps.tag.outputs.image_server }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # ── Client image ──────────────────────────────────────────────────────
-      - name: Build & push client image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: client/Dockerfile
-          push: true
-          tags: |
-            ${{ steps.tag.outputs.image_client }}:${{ steps.tag.outputs.tag }}
-            ${{ steps.tag.outputs.image_client }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-    outputs:
-      image_tag: ${{ steps.tag.outputs.tag }}
-      sha: ${{ github.sha }}
+      - run: npm ci
+      - run: npm run db:generate --workspace=server
+      - run: npm run build

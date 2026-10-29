@@ -43,10 +43,21 @@ export interface LoginPayload {
 
 export const authApi = {
   register: (data: RegisterPayload) =>
-    apiFetch<User>('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
+    apiFetch<{ message: string }>('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
 
   login: (data: LoginPayload) =>
     apiFetch<User>('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
+
+  googleLogin: (credential: string) =>
+    apiFetch<User>('/auth/google', { method: 'POST', body: JSON.stringify({ credential }) }),
+
+  verifyEmail: (token: string) =>
+    apiFetch<User>('/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) }),
+
+  resendVerification: (email: string) =>
+    apiFetch<{ message: string }>('/auth/resend-verification', {
+      method: 'POST', body: JSON.stringify({ email }),
+    }),
 
   logout: () =>
     apiFetch<{ message: string }>('/auth/logout', { method: 'POST' }),

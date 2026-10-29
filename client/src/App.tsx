@@ -11,6 +11,7 @@ import CharacterDetailPage from './pages/CharacterDetailPage';
 import WorkspacePage from './pages/WorkspacePage';
 import CombatPage from './pages/CombatPage';
 import LogbookPage from './pages/LogbookPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
         {/* Public routes */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
 
         {/* Protected routes */}
         <Route

@@ -14,7 +14,7 @@ A web app for Dungeons & Dragons groups. DMs create sessions, share an invite li
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 22+
 - PostgreSQL running locally (or a hosted instance)
 
 ## Getting Started
@@ -53,10 +53,16 @@ docker compose --profile full up
 
 - This project needs a VPS (or another host that runs Docker Compose), PostgreSQL, and a domain. GitHub Pages alone cannot run its Express API, database, and Socket.IO server.
 - Point the domain's DNS `A` record at the VPS and allow inbound TCP ports 80/443. Caddy obtains and renews HTTPS certificates automatically.
-- On the VPS, clone this repository to `/opt/dnd-session-manager`, copy `.env.prod.example` to `.env`, then set `APP_DOMAIN`, the matching `CLIENT_ORIGIN=https://<your-domain>`, a strong unique `POSTGRES_PASSWORD`, and a random `JWT_SECRET` (for example, generate one with `openssl rand -hex 32`). Keep `.env` only on the VPS.
-- In GitHub repository **Settings → Secrets and variables → Actions**, add `VPS_HOST`, `VPS_USER`, and `VPS_SSH_KEY`. The VPS SSH public key must be in `authorized_keys` for that user. The deploy workflow uses its short-lived, read-only `GITHUB_TOKEN` to pull private GHCR images.
-- Push to `main`: CI type-checks and builds the server/client images, then deploys them over SSH after CI succeeds. The server container applies Prisma migrations before starting. You can also run **Deploy to Production** manually from Actions.
+- On the VPS, clone this repository to `/home/ubuntu/DnDWebPage`, copy `.env.prod.example` to `.env`, then set `APP_DOMAIN`, the matching `CLIENT_ORIGIN=https://<your-domain>`, a strong unique `POSTGRES_PASSWORD`, and a random `JWT_SECRET` (for example, generate one with `openssl rand -hex 32`). Keep `.env` only on the VPS.
+- Pushes to `main` run CI to generate the Prisma client and build the server/client. Production deployment is manual: add `VPS_HOST`, `VPS_USER`, and `VPS_SSH_KEY` under GitHub repository **Settings → Secrets and variables → Actions**, then run **Deploy to Production** from Actions. The VPS SSH public key must be in `authorized_keys` for that user, and that user must be able to run Docker with `sudo`.
+- The deploy workflow updates `/home/ubuntu/DnDWebPage` and runs `sudo docker compose -f docker-compose.prod.yml up -d --build --remove-orphans`. The server container applies Prisma migrations before starting.
 - Check the VPS with `docker compose -f docker-compose.prod.yml ps` and `docker compose -f docker-compose.prod.yml logs -f server proxy`.
+
+### Sign-in provider setup
+
+- Google sign-in uses Google Identity Services. Create a **Web application** OAuth client in Google Cloud and add your site as an authorized JavaScript origin (for this deployment: `https://dndoturumlari.duckdns.org`). Put the client ID in `GOOGLE_CLIENT_ID` in the VPS `.env`; it is also passed into the Vite build. No Google client secret is used by this sign-in flow.
+- Email/password registration requires a working SMTP sender. Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`, and `APP_BASE_URL` in the VPS `.env`. Use port 465 for implicit TLS or 587 for STARTTLS. The app sends a single-use verification link that expires after 24 hours.
+- If SMTP is not configured, email/password registration fails closed and Google sign-in remains available when `GOOGLE_CLIENT_ID` is configured. After changing these values, rebuild and restart with `docker compose -f docker-compose.prod.yml up -d --build`.
 
 ## Useful Commands
 

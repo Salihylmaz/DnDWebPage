@@ -1,5 +1,5 @@
 # ─── Stage 1: Builder ────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -13,6 +13,8 @@ COPY shared/ ./shared/
 COPY client/ ./client/
 
 WORKDIR /app/client
+ARG VITE_GOOGLE_CLIENT_ID=""
+ENV VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}
 # Build the static bundle (output: /app/client/dist)
 RUN npm run build
 

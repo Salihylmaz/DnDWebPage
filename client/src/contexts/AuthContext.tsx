@@ -13,7 +13,10 @@ interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
   login: (data: LoginPayload) => Promise<void>;
-  register: (data: RegisterPayload) => Promise<void>;
+  googleLogin: (credential: string) => Promise<void>;
+  register: (data: RegisterPayload) => Promise<{ message: string }>;
+  verifyEmail: (token: string) => Promise<void>;
+  resendVerification: (email: string) => Promise<{ message: string }>;
   logout: () => Promise<void>;
 }
 
@@ -43,6 +46,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const registerMutation = useMutation({
     mutationFn: authApi.register,
+  });
+
+  const googleLoginMutation = useMutation({
+    mutationFn: authApi.googleLogin,
+    onSuccess: (userData) => {
+      queryClient.setQueryData(['auth', 'me'], userData);
+      navigate('/dashboard');
+    },
+  });
+
+  const verifyEmailMutation = useMutation({
+    mutationFn: authApi.verifyEmail,
     onSuccess: (userData) => {
       queryClient.setQueryData(['auth', 'me'], userData);
       navigate('/dashboard');
@@ -63,7 +78,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isLoading,
         login: async (data) => { await loginMutation.mutateAsync(data); },
-        register: async (data) => { await registerMutation.mutateAsync(data); },
+        googleLogin: async (credential) => { await googleLoginMutation.mutateAsync(credential); },
+        register: async (data) => registerMutation.mutateAsync(data),
+        verifyEmail: async (token) => { await verifyEmailMutation.mutateAsync(token); },
+        resendVerification: async (email) => authApi.resendVerification(email),
         logout: async () => { await logoutMutation.mutateAsync(); },
       }}
     >

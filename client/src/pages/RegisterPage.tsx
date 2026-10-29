@@ -1,23 +1,39 @@
-import { useState, type FormEvent } from 'react';
+import { useCallback, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { GoogleSignInButton } from '../components/GoogleSignInButton';
 
 export default function RegisterPage() {
-  const { register } = useAuth();
+  const { register, googleLogin } = useAuth();
 
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const handleGoogleCredential = useCallback(async (credential: string) => {
+    setError('');
+    setNotice('');
+    setLoading(true);
+    try {
+      await googleLogin(credential);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Google ile kayıt yapılamadı');
+    } finally {
+      setLoading(false);
+    }
+  }, [googleLogin]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
+    setNotice('');
     setLoading(true);
     try {
-      await register({ displayName, email, password });
-      // AuthContext navigates to /dashboard on success
+      const result = await register({ displayName, email, password });
+      setNotice(result.message);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Bir hata oluştu');
     } finally {
@@ -41,7 +57,18 @@ export default function RegisterPage() {
         </div>
 
         <div className="card">
-          <h2 className="mb-6 text-lg font-semibold text-white">Kayıt Ol</h2>
+          <h2 className="text-lg font-semibold text-white">Yeni hesap oluştur</h2>
+          <p className="mb-5 mt-1 text-sm text-gray-400">E-posta adresini doğrulaman gerekecek.</p>
+
+          <GoogleSignInButton onCredential={handleGoogleCredential} disabled={loading} />
+
+          {import.meta.env.VITE_GOOGLE_CLIENT_ID && (
+            <div className="my-5 flex items-center gap-3 text-xs text-gray-500" aria-hidden="true">
+              <span className="h-px flex-1 bg-white/10" />
+              <span>veya e-posta ile kayıt ol</span>
+              <span className="h-px flex-1 bg-white/10" />
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4" id="register-form">
             <div>
@@ -87,13 +114,13 @@ export default function RegisterPage() {
                 type="password"
                 autoComplete="new-password"
                 required
-                minLength={8}
+                minLength={12}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input"
                 placeholder="En az 8 karakter"
               />
-              <p className="mt-1 text-xs text-gray-500">En az 8 karakter</p>
+              <p className="mt-1 text-xs text-gray-500">En az 12 karakter</p>
             </div>
 
             {error && (
@@ -101,6 +128,8 @@ export default function RegisterPage() {
                 {error}
               </p>
             )}
+
+            {notice && <p className="rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300" role="status">{notice}</p>}
 
             <button
               id="register-submit"

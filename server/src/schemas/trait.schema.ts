@@ -3,7 +3,7 @@ import { z } from 'zod';
 // POST /api/sessions/:sessionId/characters/:charId/traits
 export const createTraitSchema = z.object({
   type: z.enum(['TRAIT', 'NOTE'], {
-    errorMap: () => ({ message: "type 'TRAIT' veya 'NOTE' olmalıdır" }),
+    error: () => "type 'TRAIT' veya 'NOTE' olmalıdır",
   }),
   text: z.string().min(1, 'Metin zorunludur').max(1000),
 });

@@ -1,6 +1,6 @@
 # ─── Stage 1: Builder ────────────────────────────────────────────────────────
 # We build TypeScript here so the final image contains only compiled JS.
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -23,7 +23,7 @@ RUN npx tsc
 
 # ─── Stage 2: Runner ─────────────────────────────────────────────────────────
 # Lean production image — no devDeps, no source files.
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 

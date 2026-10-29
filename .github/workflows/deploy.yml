@@ -1,19 +1,8 @@
 name: Deploy to Production
 
 on:
-  # Automatically deploy when CI succeeds on main
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
-
-  # Or trigger manually from GitHub UI
+  # Deploy manually after CI succeeds and production settings are ready.
   workflow_dispatch:
-    inputs:
-      image_tag:
-        description: Image tag to deploy (default: latest)
-        default: latest
-        required: false
 
 jobs:
   deploy:
@@ -21,60 +10,39 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: read
-    # Only run if CI passed (for workflow_run trigger)
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # Configure this environment without required reviewers to deploy immediately.
     environment: production   # requires manual approval if configured in GitHub
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Determine image tag
-        id: tag
-        run: |
-          TAG="${{ github.event.inputs.image_tag || 'latest' }}"
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-
-      # ── SSH into VPS and run docker compose pull + up ─────────────────────
+      # ── SSH into Lightsail and build from the checked-out source ──────────
       # Required GitHub Secrets (set in repo Settings → Secrets):
       #   VPS_HOST      — IP or domain of your VPS
       #   VPS_USER      — SSH user (e.g. ubuntu, root)
       #   VPS_SSH_KEY   — private SSH key (the VPS has the matching public key)
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
-        env:
-          GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          IMAGE_TAG: ${{ steps.tag.outputs.tag }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: GHCR_USER,GHCR_TOKEN,IMAGE_TAG
           script: |
             set -e
 
-            cd /opt/dnd-session-manager
-
-            # Authenticate for private GHCR packages using this job's read-only token.
-            echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USER" --password-stdin
-            trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
-
-            # Pull latest images
-            IMAGE_TAG="$IMAGE_TAG" docker compose -f docker-compose.prod.yml pull
-
-            # Restart services with zero-downtime recreation
-            IMAGE_TAG="$IMAGE_TAG" docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            cd /home/ubuntu/DnDWebPage
+            git pull --ff-only origin main
+            sudo docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
 
             # Remove old dangling images to save disk space
-            docker image prune -f
+            sudo docker image prune -f
 
-            echo "✅ Deploy complete. Tag: $IMAGE_TAG"
+            echo "✅ Deploy complete."
 
       - name: Notify success
         if: success()
-        run: echo "🚀 Production deploy succeeded for tag ${{ steps.tag.outputs.tag }}"
+        run: echo "🚀 Production deploy succeeded."
 
       - name: Notify failure
         if: failure()
-        run: echo "❌ Production deploy FAILED for tag ${{ steps.tag.outputs.tag }}"
+        run: echo "❌ Production deploy FAILED."
