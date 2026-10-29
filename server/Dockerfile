@@ -29,6 +29,8 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+LABEL org.opencontainers.image.source="https://github.com/Salihylmaz/DnDWebPage"
+
 # Copy workspace manifests
 COPY package.json package-lock.json ./
 COPY shared/package.json ./shared/

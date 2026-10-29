@@ -140,6 +140,39 @@ export default function SessionPage() {
         </div>
 
         {/* Quick nav */}
+        <Link
+          to={`/sessions/${sessionId}/workspace`}
+          className="card flex items-center justify-between gap-4 border-dragon-500/30 bg-dragon-500/5 hover:bg-dragon-500/10 transition-colors"
+        >
+          <div>
+            <p className="font-semibold text-white">{isDM ? 'DM çalışma alanı' : 'Çalışma alanım'}</p>
+            <p className="mt-1 text-sm text-gray-400">Panelleri seç, kendi oturum düzenini oluştur.</p>
+          </div>
+          <span className="shrink-0 text-sm text-dragon-400">Aç →</span>
+        </Link>
+
+        <Link
+          to={`/sessions/${sessionId}/combat`}
+          className="card flex items-center justify-between gap-4 border-amber-500/20 hover:border-amber-400/40 transition-colors"
+        >
+          <div>
+            <p className="font-semibold text-white">⚔️ Tur sırası</p>
+            <p className="mt-1 text-sm text-gray-400">Combat’ta kimin sırası olduğunu gör.</p>
+          </div>
+          <span className="shrink-0 text-sm text-amber-300">Aç →</span>
+        </Link>
+
+        <Link
+          to={`/sessions/${sessionId}/logbook`}
+          className="card flex items-center justify-between gap-4 border-emerald-500/20 hover:border-emerald-400/40 transition-colors"
+        >
+          <div>
+            <p className="font-semibold text-white">📖 Oturum günlüğü</p>
+            <p className="mt-1 text-sm text-gray-400">Önceki oturumları ve en son nerede kaldığınızı hatırla.</p>
+          </div>
+          <span className="shrink-0 text-sm text-emerald-300">Aç →</span>
+        </Link>
+
         <div className="grid grid-cols-2 gap-3">
           <Link
             to={`/sessions/${sessionId}/items`}

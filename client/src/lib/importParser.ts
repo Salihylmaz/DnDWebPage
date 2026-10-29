@@ -34,6 +34,7 @@ export interface ParsedCharacter {
   level: number;
   stats: ParsedStat[];
   items: ParsedItem[];     // inventory items → saved as session Items
+  traits: string[];
   notes: string[];         // free-form lines (reactions, traits, misc…)
   rawLines?: string[];
 }
@@ -47,8 +48,8 @@ const AC_KEYS    = ['zırh', 'zirh', 'ac', 'armor class', 'savunma'];
 
 // Section headers: inventory items get their own array; the rest go to notes
 const ITEM_SECTIONS  = ['envanter', 'inventory', 'eşyalar', 'esyalar', 'ekipman', 'equipment'];
-const OTHER_NOTE_SECTIONS = ['huylar', 'traits', 'özellikler', 'ozellikler',
-  'reaksiyonlar', 'reactions', 'yetenekler', 'notlar', 'notes'];
+const TRAIT_SECTIONS = ['huylar', 'traits', 'özellikler', 'ozellikler', 'kişilik', 'kisilik'];
+const OTHER_NOTE_SECTIONS = ['reaksiyonlar', 'reactions', 'yetenekler', 'notlar', 'notes'];
 
 function matchKey(raw: string, aliases: string[]): boolean {
   const n = raw.toLowerCase().trim();
@@ -62,9 +63,10 @@ function stripModifier(val: string): string {
 
 // ── Single character block parser ─────────────────────────────────────────────
 function parseBlock(lines: string[]): ParsedCharacter {
-  const char: ParsedCharacter = { name: '', class: '', level: 1, stats: [], items: [], notes: [] };
+  const char: ParsedCharacter = { name: '', class: '', level: 1, stats: [], items: [], traits: [], notes: [] };
   let inNoteSection = false;
   let inItemSection = false;
+  let inTraitSection = false;
 
   for (const raw of lines) {
     const line = raw.trim();
@@ -78,6 +80,7 @@ function parseBlock(lines: string[]): ParsedCharacter {
         // Plain item name with no description — e.g. "Kalkan"
         char.items.push({ name: line, notes: '' }); continue;
       }
+      if (inTraitSection) { char.traits.push(line); continue; }
       // e.g. "Can 36/41" — try splitting on first whitespace
       const spIdx = line.search(/\s/);
       if (spIdx > 0) {
@@ -100,7 +103,16 @@ function parseBlock(lines: string[]): ParsedCharacter {
     // ── Section header only (e.g. "Envanter:") ───────────────────────────────
     if (!rawVal) {
       inItemSection  = ITEM_SECTIONS.some((s)  => rawKey.toLowerCase().startsWith(s));
-      inNoteSection  = !inItemSection && OTHER_NOTE_SECTIONS.some((s) => rawKey.toLowerCase().startsWith(s));
+      inTraitSection = !inItemSection && TRAIT_SECTIONS.some((s) => rawKey.toLowerCase().startsWith(s));
+      inNoteSection  = !inItemSection && !inTraitSection && OTHER_NOTE_SECTIONS.some((s) => rawKey.toLowerCase().startsWith(s));
+      continue;
+    }
+
+    if (TRAIT_SECTIONS.some((s) => rawKey.toLowerCase().startsWith(s))) {
+      rawVal.split(/[,;|]+/).map((trait) => trait.trim()).filter(Boolean).forEach((trait) => char.traits.push(trait));
+      inTraitSection = false;
+      inItemSection = false;
+      inNoteSection = false;
       continue;
     }
 
@@ -109,6 +121,7 @@ function parseBlock(lines: string[]): ParsedCharacter {
     if (inItemSection) {
       char.items.push({ name: rawKey, notes: rawVal }); continue;
     }
+    if (inTraitSection) { char.traits.push(`${rawKey}: ${rawVal}`); continue; }
 
     // Reset note section when we hit a real key:value line outside item sections
     inNoteSection = false;
@@ -162,10 +175,50 @@ function parseTxt(text: string): ParsedCharacter[] {
   return blocks.map(parseBlock).filter((c) => c.name);
 }
 
+async function extractPdfText(file: File): Promise<string> {
+  const [pdfjs, pdfWorker] = await Promise.all([
+    import('pdfjs-dist'),
+    import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
+  ]);
+  pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker.default;
+  const document = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+  const pages: string[] = [];
+
+  try {
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
+      const page = await document.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const lines: string[] = [];
+      let line = '';
+
+      for (const item of content.items) {
+        if (!('str' in item)) continue;
+        const text = item.str.trim();
+        if (text) line += `${line ? ' ' : ''}${text}`;
+        if (item.hasEOL && line) {
+          lines.push(line);
+          line = '';
+        }
+      }
+
+      if (line) lines.push(line);
+      pages.push(lines.join('\n'));
+    }
+  } finally {
+    await document.destroy();
+  }
+
+  const text = pages.join('\n').trim();
+  if (!text) {
+    throw new Error('PDF dosyasında seçilebilir metin bulunamadı. Taranmış PDF dosyaları desteklenmiyor.');
+  }
+  return text;
+}
+
 // ── CSV / Excel parser ─────────────────────────────────────────────────────────
 function parseSheet(rows: Record<string, unknown>[]): ParsedCharacter[] {
   return rows.map((row) => {
-    const char: ParsedCharacter = { name: '', class: '', level: 1, stats: [], items: [], notes: [] };
+    const char: ParsedCharacter = { name: '', class: '', level: 1, stats: [], items: [], traits: [], notes: [] };
 
     for (const [rawKey, rawVal] of Object.entries(row)) {
       const val = stripModifier(String(rawVal ?? '').trim());
@@ -183,6 +236,10 @@ function parseSheet(rows: Record<string, unknown>[]): ParsedCharacter[] {
         });
         continue;
       }
+      if (TRAIT_SECTIONS.some((s) => rawKey.toLowerCase().startsWith(s))) {
+        val.split(/[,;|]+/).map((trait) => trait.trim()).filter(Boolean).forEach((trait) => char.traits.push(trait));
+        continue;
+      }
 
       char.stats.push({ name: rawKey.toUpperCase().trim(), value: val });
     }
@@ -198,6 +255,10 @@ export async function parseFile(file: File): Promise<ParsedCharacter[]> {
   if (name.endsWith('.txt')) {
     const text = await file.text();
     return parseTxt(text);
+  }
+
+  if (name.endsWith('.pdf')) {
+    return parseTxt(await extractPdfText(file));
   }
 
   if (name.endsWith('.csv')) {

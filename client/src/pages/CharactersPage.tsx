@@ -7,8 +7,7 @@ import type { CreateCharacterPayload } from '../lib/api';
 import { useSessionSocket } from '../hooks/useSessionSocket';
 import { parseFile } from '../lib/importParser';
 import type { ParsedCharacter } from '../lib/importParser';
-import { sessionsApi, charactersApi, traitsApi, itemsApi, skillsApi } from '../lib/api';
-import type { CharacterTrait, Item, CharacterSkill, SkillInput, SkillActionType } from '@dnd/shared';
+import { sessionsApi, charactersApi, itemsApi } from '../lib/api';
 
 // ── Create Character Modal ────────────────────────────────────────────────────
 function CreateCharacterModal({
@@ -374,6 +373,9 @@ function ImportModal({
           notes: c.notes.filter((n) => n.trim()).length > 0
             ? c.notes.filter((n) => n.trim())
             : undefined,
+          traits: c.traits.filter((trait) => trait.trim()).length > 0
+            ? c.traits.filter((trait) => trait.trim())
+            : undefined,
         });
 
         // 2. Create each inventory item linked to the character
@@ -431,11 +433,11 @@ function ImportModal({
                 <p className="text-4xl mb-3">📄</p>
                 <p className="text-gray-300 font-medium">Dosyayı buraya sürükle</p>
                 <p className="text-gray-500 text-sm mt-1">ya da tıklayarak seç</p>
-                <p className="text-gray-600 text-xs mt-3">.txt &nbsp;·&nbsp; .csv &nbsp;·&nbsp; .xlsx &nbsp;·&nbsp; .xls</p>
+                <p className="text-gray-600 text-xs mt-3">.txt &nbsp;·&nbsp; .pdf &nbsp;·&nbsp; .csv &nbsp;·&nbsp; .xlsx &nbsp;·&nbsp; .xls</p>
                 <input
                   ref={fileRef}
                   type="file"
-                  accept=".txt,.csv,.xlsx,.xls"
+                  accept=".txt,.pdf,.csv,.xlsx,.xls,application/pdf"
                   className="hidden"
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
                 />
@@ -486,6 +488,20 @@ function ImportModal({
                               {s.name}: {s.value}
                             </span>
                           ))}
+                        </div>
+                      )}
+                      {c.traits.length > 0 && (
+                        <div className="mt-1.5">
+                          <p className="mb-1 text-[10px] font-medium uppercase text-gray-500">Özellikler</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {c.traits.map((trait, idx) => <span key={`${trait}-${idx}`} className="badge bg-dragon-500/20 text-dragon-300">{trait}</span>)}
+                          </div>
+                        </div>
+                      )}
+                      {c.notes.length > 0 && (
+                        <div className="mt-1.5">
+                          <p className="mb-1 text-[10px] font-medium uppercase text-gray-500">Notlar</p>
+                          <div className="flex flex-wrap gap-1.5">{c.notes.map((note, idx) => <span key={`${note}-${idx}`} className="badge bg-white/10 text-gray-300">{note}</span>)}</div>
                         </div>
                       )}
                       {c.items.length > 0 && (

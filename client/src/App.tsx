@@ -8,6 +8,9 @@ import SessionPage from './pages/SessionPage';
 import ItemsPage from './pages/ItemsPage';
 import CharactersPage from './pages/CharactersPage';
 import CharacterDetailPage from './pages/CharacterDetailPage';
+import WorkspacePage from './pages/WorkspacePage';
+import CombatPage from './pages/CombatPage';
+import LogbookPage from './pages/LogbookPage';
 
 export default function App() {
   return (
@@ -31,6 +34,30 @@ export default function App() {
           element={
             <ProtectedRoute>
               <SessionPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/sessions/:sessionId/workspace"
+          element={
+            <ProtectedRoute>
+              <WorkspacePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/sessions/:sessionId/combat"
+          element={
+            <ProtectedRoute>
+              <CombatPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/sessions/:sessionId/logbook"
+          element={
+            <ProtectedRoute>
+              <LogbookPage />
             </ProtectedRoute>
           }
         />

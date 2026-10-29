@@ -106,7 +106,7 @@ router.post(
       }
     }
 
-    const { name, class: charClass, level, stats: inputStats, notes: inputNotes } = result.data;
+    const { name, class: charClass, level, stats: inputStats, notes: inputNotes, traits: inputTraits } = result.data;
 
     // If stats are provided in the payload, merge them over defaults (provided values take priority)
     const statEntries = (() => {
@@ -132,12 +132,13 @@ router.post(
         stats: {
           create: statEntries,
         },
-        ...(inputNotes && inputNotes.length > 0
+        ...(inputNotes?.length || inputTraits?.length
           ? {
               traits: {
-                create: inputNotes
-                  .filter((t) => t.trim())
-                  .map((text) => ({ type: 'NOTE', text: text.trim() })),
+                create: [
+                  ...(inputTraits ?? []).filter((text) => text.trim()).map((text) => ({ type: 'TRAIT' as const, text: text.trim() })),
+                  ...(inputNotes ?? []).filter((text) => text.trim()).map((text) => ({ type: 'NOTE' as const, text: text.trim() })),
+                ],
               },
             }
           : {}),

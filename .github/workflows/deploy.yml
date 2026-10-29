@@ -19,6 +19,9 @@ jobs:
   deploy:
     name: Deploy to VPS
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
     # Only run if CI passed (for workflow_run trigger)
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     environment: production   # requires manual approval if configured in GitHub
@@ -39,27 +42,34 @@ jobs:
       #   VPS_SSH_KEY   — private SSH key (the VPS has the matching public key)
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_TAG: ${{ steps.tag.outputs.tag }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          envs: GHCR_USER,GHCR_TOKEN,IMAGE_TAG
           script: |
             set -e
 
             cd /opt/dnd-session-manager
 
+            # Authenticate for private GHCR packages using this job's read-only token.
+            echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USER" --password-stdin
+            trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
+
             # Pull latest images
-            IMAGE_TAG=${{ steps.tag.outputs.tag }} \
-            docker compose -f docker-compose.prod.yml pull
+            IMAGE_TAG="$IMAGE_TAG" docker compose -f docker-compose.prod.yml pull
 
             # Restart services with zero-downtime recreation
-            IMAGE_TAG=${{ steps.tag.outputs.tag }} \
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            IMAGE_TAG="$IMAGE_TAG" docker compose -f docker-compose.prod.yml up -d --remove-orphans
 
             # Remove old dangling images to save disk space
             docker image prune -f
 
-            echo "✅ Deploy complete. Tag: ${{ steps.tag.outputs.tag }}"
+            echo "✅ Deploy complete. Tag: $IMAGE_TAG"
 
       - name: Notify success
         if: success()

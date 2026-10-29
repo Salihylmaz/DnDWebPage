@@ -1,6 +1,6 @@
 # docker-compose.prod.yml — PRODUCTION
 #
-# Three containers: db, server (Express), client (Nginx)
+# Four containers: db, server (Express), client (Nginx), proxy (Caddy with automatic HTTPS)
 # All env vars are injected via a .env file on the VPS (never committed to git).
 #
 # Usage on VPS:
@@ -34,7 +34,7 @@ services:
 
   # ── Express API Server ──────────────────────────────────────────────────────
   server:
-    image: ${DOCKER_IMAGE_SERVER:-ghcr.io/GITHUB_USER/dnd-server}:${IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_SERVER:-ghcr.io/salihylmaz/dnd-server}:${IMAGE_TAG:-latest}
     restart: always
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
@@ -49,13 +49,32 @@ services:
 
   # ── Nginx + React SPA ───────────────────────────────────────────────────────
   client:
-    image: ${DOCKER_IMAGE_CLIENT:-ghcr.io/GITHUB_USER/dnd-client}:${IMAGE_TAG:-latest}
+    image: ${DOCKER_IMAGE_CLIENT:-ghcr.io/salihylmaz/dnd-client}:${IMAGE_TAG:-latest}
     restart: always
-    ports:
-      - "80:80"
-      - "443:443"            # for when you add SSL (e.g. via Certbot/Traefik)
+    expose:
+      - "80"
     depends_on:
       - server
 
+  # ── HTTPS reverse proxy ─────────────────────────────────────────────────────
+  # Caddy obtains and renews TLS certificates automatically for APP_DOMAIN.
+  proxy:
+    image: caddy:2-alpine
+    restart: always
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - client
+
 volumes:
   db_data:
+  caddy_data:
+  caddy_config:

@@ -51,17 +51,12 @@ docker compose --profile full up
 
 ### Production Deploy
 
-```bash
-# On your VPS:
-git clone <repo-url> /opt/dnd-session-manager
-cd /opt/dnd-session-manager
-cp .env.prod.example .env   # fill in real secrets
-docker compose -f docker-compose.prod.yml up -d --build
-```
-
-- Frontend: http://localhost:5173
-- Backend: http://localhost:3001
-- Health check: http://localhost:3001/health
+- This project needs a VPS (or another host that runs Docker Compose), PostgreSQL, and a domain. GitHub Pages alone cannot run its Express API, database, and Socket.IO server.
+- Point the domain's DNS `A` record at the VPS and allow inbound TCP ports 80/443. Caddy obtains and renews HTTPS certificates automatically.
+- On the VPS, clone this repository to `/opt/dnd-session-manager`, copy `.env.prod.example` to `.env`, then set `APP_DOMAIN`, the matching `CLIENT_ORIGIN=https://<your-domain>`, a strong unique `POSTGRES_PASSWORD`, and a random `JWT_SECRET` (for example, generate one with `openssl rand -hex 32`). Keep `.env` only on the VPS.
+- In GitHub repository **Settings → Secrets and variables → Actions**, add `VPS_HOST`, `VPS_USER`, and `VPS_SSH_KEY`. The VPS SSH public key must be in `authorized_keys` for that user. The deploy workflow uses its short-lived, read-only `GITHUB_TOKEN` to pull private GHCR images.
+- Push to `main`: CI type-checks and builds the server/client images, then deploys them over SSH after CI succeeds. The server container applies Prisma migrations before starting. You can also run **Deploy to Production** manually from Actions.
+- Check the VPS with `docker compose -f docker-compose.prod.yml ps` and `docker compose -f docker-compose.prod.yml logs -f server proxy`.
 
 ## Useful Commands
 

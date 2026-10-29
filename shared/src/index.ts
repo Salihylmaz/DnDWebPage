@@ -32,6 +32,7 @@ export interface Item {
   name: string;
   description: string;
   notes: string | null;
+  category: 'COMBAT' | 'QUEST';
   ownerCharacterId: string | null;
   createdAt: string;
 }
@@ -92,3 +93,55 @@ export interface CharacterSkill {
 }
 
 export type SkillInput = Omit<CharacterSkill, 'id' | 'characterId' | 'sortOrder'>;
+
+export type SessionCreatureKind = 'NPC' | 'MONSTER';
+
+export interface SessionCreature {
+  id: string;
+  kind: SessionCreatureKind;
+  name: string;
+  summary: string;
+  hp: number | null;
+  maxHp: number | null;
+  armorClass: number | null;
+  initiative: number | null;
+  isVisibleToPlayers: boolean;
+  sessionId: string;
+  createdAt: string;
+}
+
+export type SessionCreatureInput = Omit<SessionCreature, 'id' | 'sessionId' | 'createdAt'>;
+
+export type CombatantKind = 'CHARACTER' | 'NPC' | 'MONSTER' | 'CUSTOM';
+
+export interface Combatant {
+  id: string;
+  sourceId: string | null;
+  kind: CombatantKind;
+  name: string;
+  initiative: number;
+}
+
+export interface SessionCombatState {
+  sessionId: string;
+  round: number;
+  activeEntryId: string | null;
+  isActive: boolean;
+  entries: Combatant[];
+  updatedAt: string;
+}
+
+export type SessionCombatInput = Pick<SessionCombatState, 'round' | 'activeEntryId' | 'isActive' | 'entries'>;
+
+export interface LogbookEntry {
+  id: string;
+  sessionId: string;
+  title: string;
+  summary: string;
+  currentStatus: string;
+  sessionDate: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type LogbookEntryInput = Pick<LogbookEntry, 'title' | 'summary' | 'currentStatus' | 'sessionDate'>;

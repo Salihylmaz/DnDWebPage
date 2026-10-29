@@ -17,6 +17,7 @@ function formatItem(item: {
   name: string;
   description: string;
   notes: string | null;
+  category: 'COMBAT' | 'QUEST';
   ownerCharacterId: string | null;
   createdAt: Date;
 }) {
@@ -70,7 +71,7 @@ router.post(
       return;
     }
 
-    const { name, description, notes, ownerCharacterId } = result.data;
+    const { name, description, notes, ownerCharacterId, category } = result.data;
 
     // Validate ownerCharacterId belongs to this session
     let ownerChar: { id: string; ownerId: string } | null = null;
@@ -99,6 +100,7 @@ router.post(
         name,
         description: description ?? '',
         notes: notes ?? null,
+        category,
         ownerCharacterId: ownerCharacterId ?? null,
       },
     });

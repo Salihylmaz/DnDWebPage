@@ -22,6 +22,8 @@ const SOCKET_EVENTS = {
   TRAIT_DELETED: 'trait:deleted',
   CHARACTER_CREATED: 'character:created',
   CHARACTER_DELETED: 'character:deleted',
+  COMBAT_UPDATED: 'combat:updated',
+  LOGBOOK_UPDATED: 'logbook:updated',
 } as const;
 
 // Socket connects to the backend server directly.
@@ -82,6 +84,12 @@ export function useSessionSocket(sessionId: string | undefined) {
     const onTraitChanged = (data: { characterId: string }) => {
       queryClient.invalidateQueries({ queryKey: ['traits', sessionId, data.characterId] });
     };
+    const onCombatUpdated = () => {
+      queryClient.invalidateQueries({ queryKey: ['combat', sessionId] });
+    };
+    const onLogbookUpdated = () => {
+      queryClient.invalidateQueries({ queryKey: ['logbook', sessionId] });
+    };
 
     s.on(SOCKET_EVENTS.ITEM_CREATED, onItemCreated);
     s.on(SOCKET_EVENTS.ITEM_UPDATED, onItemUpdated);
@@ -92,6 +100,8 @@ export function useSessionSocket(sessionId: string | undefined) {
     s.on(SOCKET_EVENTS.TRAIT_CREATED, onTraitChanged);
     s.on(SOCKET_EVENTS.TRAIT_UPDATED, onTraitChanged);
     s.on(SOCKET_EVENTS.TRAIT_DELETED, onTraitChanged);
+    s.on(SOCKET_EVENTS.COMBAT_UPDATED, onCombatUpdated);
+    s.on(SOCKET_EVENTS.LOGBOOK_UPDATED, onLogbookUpdated);
 
     return () => {
       s.emit('leave-session', sessionId);
@@ -104,6 +114,8 @@ export function useSessionSocket(sessionId: string | undefined) {
       s.off(SOCKET_EVENTS.TRAIT_CREATED, onTraitChanged);
       s.off(SOCKET_EVENTS.TRAIT_UPDATED, onTraitChanged);
       s.off(SOCKET_EVENTS.TRAIT_DELETED, onTraitChanged);
+      s.off(SOCKET_EVENTS.COMBAT_UPDATED, onCombatUpdated);
+      s.off(SOCKET_EVENTS.LOGBOOK_UPDATED, onLogbookUpdated);
     };
   }, [sessionId, queryClient]);
 }

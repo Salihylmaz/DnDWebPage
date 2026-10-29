@@ -1,0 +1,4 @@
+CREATE TYPE "ItemCategory" AS ENUM ('COMBAT', 'QUEST');
+
+ALTER TABLE "Item"
+ADD COLUMN "category" "ItemCategory" NOT NULL DEFAULT 'COMBAT';

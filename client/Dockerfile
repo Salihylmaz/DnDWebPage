@@ -20,6 +20,8 @@ RUN npm run build
 # Serve the built SPA with Nginx. Nginx also handles API proxying in production.
 FROM nginx:1.27-alpine AS runner
 
+LABEL org.opencontainers.image.source="https://github.com/Salihylmaz/DnDWebPage"
+
 # Remove default nginx config
 RUN rm /etc/nginx/conf.d/default.conf
 

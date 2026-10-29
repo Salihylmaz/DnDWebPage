@@ -12,40 +12,70 @@ datasource db {
 
 // ─── User ─────────────────────────────────────────────────────────────────────
 model User {
-  id           String          @id @default(uuid())
-  email        String          @unique
+  id           String   @id @default(uuid())
+  email        String   @unique
   passwordHash String
   displayName  String
-  createdAt    DateTime        @default(now())
+  createdAt    DateTime @default(now())
 
   // Sessions where this user is the DM
-  dmSessions   Session[]       @relation("DMSessions")
+  dmSessions  Session[]       @relation("DMSessions")
   // Sessions where this user is a member (DM or player)
-  memberships  SessionMember[]
-  characters   Character[]
+  memberships SessionMember[]
+  characters  Character[]
 }
 
 // ─── Session ──────────────────────────────────────────────────────────────────
 model Session {
-  id                  String          @id @default(uuid())
+  id                  String   @id @default(uuid())
   name                String
   description         String?
-  inviteCode          String          @unique
-  playersCanEditStats Boolean         @default(true)
-  createdAt           DateTime        @default(now())
+  inviteCode          String   @unique
+  playersCanEditStats Boolean  @default(true)
+  createdAt           DateTime @default(now())
 
-  dm          User            @relation("DMSessions", fields: [dmId], references: [id])
-  dmId        String
-  members     SessionMember[]
-  items       Item[]
-  characters  Character[]
+  dm         User              @relation("DMSessions", fields: [dmId], references: [id])
+  dmId       String
+  members    SessionMember[]
+  items      Item[]
+  characters Character[]
+  creatures  SessionCreature[]
+  combat     SessionCombat?
+  logbook    LogbookEntry[]
+}
+
+model LogbookEntry {
+  id            String   @id @default(uuid())
+  title         String
+  summary       String   @db.Text
+  currentStatus String   @default("") @db.Text
+  sessionDate   DateTime @db.Date
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+
+  @@index([sessionId, sessionDate])
+}
+
+model SessionCombat {
+  id             String   @id @default(uuid())
+  sessionId      String   @unique
+  round          Int      @default(1)
+  activeEntryId  String?
+  isActive       Boolean  @default(false)
+  entries        Json
+  updatedAt      DateTime @updatedAt
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
 
 // ─── SessionMember ────────────────────────────────────────────────────────────
 model SessionMember {
-  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
   role      Role
 
@@ -53,12 +83,18 @@ model SessionMember {
 }
 
 // ─── Item ─────────────────────────────────────────────────────────────────────
+enum ItemCategory {
+  COMBAT
+  QUEST
+}
+
 model Item {
-  id          String     @id @default(uuid())
+  id          String   @id @default(uuid())
   name        String
   description String
   notes       String?
-  createdAt   DateTime   @default(now())
+  category    ItemCategory @default(COMBAT)
+  createdAt   DateTime @default(now())
 
   session          Session    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId        String
@@ -68,29 +104,48 @@ model Item {
 
 // ─── Character ────────────────────────────────────────────────────────────────
 model Character {
-  id        String           @id @default(uuid())
+  id        String   @id @default(uuid())
   name      String
   class     String
-  level     Int              @default(1)
-  createdAt DateTime         @default(now())
+  level     Int      @default(1)
+  createdAt DateTime @default(now())
 
-  session   Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sessionId String
-  owner     User             @relation(fields: [ownerId], references: [id])
+  owner     User    @relation(fields: [ownerId], references: [id])
   ownerId   String
 
-  stats     CharacterStat[]
-  traits    CharacterTrait[]
-  items     Item[]
+  stats  CharacterStat[]
+  traits CharacterTrait[]
+  items  Item[]
+  skills CharacterSkill[]
+}
+
+model SessionCreature {
+  id                 String              @id @default(uuid())
+  kind               SessionCreatureKind
+  name               String
+  summary            String              @default("")
+  hp                 Int?
+  maxHp              Int?
+  armorClass         Int?
+  initiative         Int?
+  isVisibleToPlayers Boolean             @default(false)
+  createdAt          DateTime            @default(now())
+
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+
+  @@index([sessionId, kind, createdAt])
 }
 
 // ─── CharacterStat ────────────────────────────────────────────────────────────
 // Stats are stored as rows, not fixed columns. This allows different game
 // systems to add custom stat names (STR, DEX, CON, HP, AC …or anything else).
 model CharacterStat {
-  id          String    @id @default(uuid())
-  name        String
-  value       String    // string for flexibility: "18", "3d6", "proficient"
+  id    String @id @default(uuid())
+  name  String
+  value String // string for flexibility: "18", "3d6", "proficient"
 
   character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
   characterId String
@@ -98,12 +153,30 @@ model CharacterStat {
 
 // ─── CharacterTrait ───────────────────────────────────────────────────────────
 model CharacterTrait {
-  id          String     @id @default(uuid())
-  type        TraitType
-  text        String
+  id   String    @id @default(uuid())
+  type TraitType
+  text String
 
-  character   Character  @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
   characterId String
+}
+
+model CharacterSkill {
+  id          String          @id @default(uuid())
+  name        String
+  subtitle    String?
+  description String          @default("")
+  skillType   String?
+  range       String?
+  actionType  SkillActionType @default(ACTION)
+  usesMax     Int             @default(0)
+  usesCurrent Int             @default(0)
+  sortOrder   Int             @default(0)
+
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  characterId String
+
+  @@index([characterId, sortOrder])
 }
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
@@ -115,4 +188,17 @@ enum Role {
 enum TraitType {
   TRAIT
   NOTE
+}
+
+enum SkillActionType {
+  ACTION
+  BONUS_ACTION
+  REACTION
+  FREE
+  OTHER
+}
+
+enum SessionCreatureKind {
+  NPC
+  MONSTER
 }

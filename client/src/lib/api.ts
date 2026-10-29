@@ -1,4 +1,4 @@
-import type { User, Session, SessionMember, Item, Character, CharacterStat, CharacterTrait, ApiSuccess, ApiError } from '@dnd/shared';
+import type { User, Session, SessionMember, Item, Character, CharacterStat, CharacterTrait, CharacterSkill, SkillInput, SessionCreature, SessionCreatureInput, SessionCombatState, SessionCombatInput, LogbookEntry, LogbookEntryInput, ApiSuccess, ApiError } from '@dnd/shared';
 
 // ── Base fetch wrapper ────────────────────────────────────────────────────────
 // All requests go through /api (proxied to Express in dev, Nginx in prod).
@@ -93,6 +93,7 @@ export interface CreateItemPayload {
   description: string;
   notes?: string;
   ownerCharacterId?: string | null;
+  category?: 'COMBAT' | 'QUEST';
 }
 
 export interface UpdateItemPayload {
@@ -100,6 +101,7 @@ export interface UpdateItemPayload {
   description?: string;
   notes?: string | null;
   ownerCharacterId?: string | null;
+  category?: 'COMBAT' | 'QUEST';
 }
 
 export const itemsApi = {
@@ -135,6 +137,8 @@ export interface CreateCharacterPayload {
   stats?: { name: string; value: string }[];
   /** Import-time: free-text notes saved as NOTE traits */
   notes?: string[];
+  /** Import-time: personality qualities saved as TRAIT entries */
+  traits?: string[];
 }
 
 export interface UpdateCharacterPayload {
@@ -206,19 +210,58 @@ export { apiFetch };
 
 export const skillsApi = {
   list: (sessionId: string, charId: string) =>
-    request<CharacterSkill[]>(`/sessions/${sessionId}/characters/${charId}/skills`),
+    apiFetch<CharacterSkill[]>(`/sessions/${sessionId}/characters/${charId}/skills`),
   create: (sessionId: string, charId: string, data: SkillInput) =>
-    request<CharacterSkill>(`/sessions/${sessionId}/characters/${charId}/skills`, {
+    apiFetch<CharacterSkill>(`/sessions/${sessionId}/characters/${charId}/skills`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
   update: (sessionId: string, charId: string, id: string, data: Partial<SkillInput>) =>
-    request<CharacterSkill>(`/sessions/${sessionId}/characters/${charId}/skills/${id}`, {
+    apiFetch<CharacterSkill>(`/sessions/${sessionId}/characters/${charId}/skills/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
   delete: (sessionId: string, charId: string, id: string) =>
-    request<void>(`/sessions/${sessionId}/characters/${charId}/skills/${id}`, {
+    apiFetch<{ message: string }>(`/sessions/${sessionId}/characters/${charId}/skills/${id}`, {
       method: 'DELETE',
     }),
+};
+
+export const creaturesApi = {
+  list: (sessionId: string) => apiFetch<SessionCreature[]>(`/sessions/${sessionId}/creatures`),
+  create: (sessionId: string, data: SessionCreatureInput) =>
+    apiFetch<SessionCreature>(`/sessions/${sessionId}/creatures`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (sessionId: string, id: string, data: Partial<SessionCreatureInput>) =>
+    apiFetch<SessionCreature>(`/sessions/${sessionId}/creatures/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  delete: (sessionId: string, id: string) =>
+    apiFetch<{ message: string }>(`/sessions/${sessionId}/creatures/${id}`, { method: 'DELETE' }),
+};
+
+export const combatApi = {
+  get: (sessionId: string) => apiFetch<SessionCombatState | null>(`/sessions/${sessionId}/combat`),
+  save: (sessionId: string, data: SessionCombatInput) =>
+    apiFetch<SessionCombatState>(`/sessions/${sessionId}/combat`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+};
+
+export const logbookApi = {
+  list: (sessionId: string) => apiFetch<LogbookEntry[]>(`/sessions/${sessionId}/logbook`),
+  create: (sessionId: string, data: LogbookEntryInput) =>
+    apiFetch<LogbookEntry>(`/sessions/${sessionId}/logbook`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+  update: (sessionId: string, id: string, data: LogbookEntryInput) =>
+    apiFetch<LogbookEntry>(`/sessions/${sessionId}/logbook/${id}`, {
+      method: 'PATCH', body: JSON.stringify(data),
+    }),
+  delete: (sessionId: string, id: string) =>
+    apiFetch<{ message: string }>(`/sessions/${sessionId}/logbook/${id}`, { method: 'DELETE' }),
 };

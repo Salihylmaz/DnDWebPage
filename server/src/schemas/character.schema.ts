@@ -10,6 +10,7 @@ export const createCharacterSchema = z.object({
     .array(z.object({ name: z.string().min(1).max(30), value: z.string().max(50) }))
     .optional(),
   notes: z.array(z.string().max(1000)).optional(),
+  traits: z.array(z.string().max(1000)).optional(),
 });
 
 // PATCH /api/sessions/:sessionId/characters/:charId

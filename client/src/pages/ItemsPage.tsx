@@ -23,6 +23,7 @@ function ItemForm({
   const [name, setName] = useState(initial?.name ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [notes, setNotes] = useState(initial?.notes ?? '');
+  const [category, setCategory] = useState<'COMBAT' | 'QUEST'>(initial?.category ?? 'COMBAT');
   const [ownerCharacterId, setOwnerCharacterId] = useState<string>(
     initial?.ownerCharacterId ?? ''
   );
@@ -57,6 +58,13 @@ function ItemForm({
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
+      </div>
+      <div>
+        <label className="mb-1.5 block text-sm font-medium text-gray-300">Eşya Türü</label>
+        <select className="input" value={category} onChange={(e) => setCategory(e.target.value as 'COMBAT' | 'QUEST')}>
+          <option value="COMBAT">Savaş eşyası</option>
+          <option value="QUEST">Görev eşyası</option>
+        </select>
       </div>
       <div>
         <label className="mb-1.5 block text-sm font-medium text-gray-300">
@@ -98,6 +106,7 @@ function ItemForm({
             description,
             notes: notes || undefined,
             ownerCharacterId: ownerCharacterId || null,
+            category,
           })}
           disabled={!valid || isPending}
           className="btn-primary flex-1"

@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import { sessionsApi, charactersApi, traitsApi, itemsApi, skillsApi } from '../lib/api';
 import type { StatEntry } from '../lib/api';
 import type { CharacterTrait, Item, CharacterSkill, SkillInput, SkillActionType } from '@dnd/shared';
+import { parseSkillsPdf } from '../lib/skillImportParser';
 import { createPortal } from 'react-dom';
 
 // ── Edit Basic Info Modal ─────────────────────────────────────────────────────
@@ -374,11 +375,13 @@ function SkillFormModal({
   onSave,
   onClose,
   isPending,
+  error,
 }: {
   initial: SkillInput;
   onSave: (data: SkillInput) => void;
   onClose: () => void;
   isPending: boolean;
+  error?: string;
 }) {
   const [form, setForm] = useState<SkillInput>(initial);
   const set = <K extends keyof SkillInput>(key: K, value: SkillInput[K]) =>
@@ -401,6 +404,8 @@ function SkillFormModal({
           <h2 className="text-lg font-bold text-white">Skill</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-xl transition-colors">✕</button>
         </div>
+
+        {error && <p role="alert" className="mb-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400">{error}</p>}
 
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -469,6 +474,181 @@ function SkillFormModal({
   );
 }
 
+function SkillsImportModal({
+  sessionId,
+  charId,
+  onClose,
+  onImported,
+}: {
+  sessionId: string;
+  charId: string;
+  onClose: () => void;
+  onImported: () => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [skills, setSkills] = useState<SkillInput[]>([]);
+  const [error, setError] = useState('');
+  const [loadingFile, setLoadingFile] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  async function readFile(file: File) {
+    setError('');
+    setSkills([]);
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      setError('Lütfen skill tablosunu içeren bir PDF seç.');
+      return;
+    }
+
+    setLoadingFile(true);
+    try {
+      setSkills(await parseSkillsPdf(file));
+    } catch (cause) {
+      setError((cause as Error).message || 'PDF okunamadı.');
+    } finally {
+      setLoadingFile(false);
+    }
+  }
+
+  function updateSkill(index: number, patch: Partial<SkillInput>) {
+    setSkills((current) => current.map((skill, i) => i === index ? { ...skill, ...patch } : skill));
+  }
+
+  async function importSkills() {
+    setImporting(true);
+    setError('');
+    let imported = 0;
+    try {
+      for (const skill of skills) {
+        await skillsApi.create(sessionId, charId, {
+          ...skill,
+          name: skill.name.trim(),
+          subtitle: skill.subtitle?.trim() || null,
+          description: skill.description.trim(),
+          skillType: skill.skillType?.trim() || null,
+          range: skill.range?.trim() || null,
+        });
+        imported++;
+      }
+      onImported();
+      onClose();
+    } catch (cause) {
+      if (imported > 0) setSkills((current) => current.slice(imported));
+      setError(imported
+        ? `${imported} skill eklendi. Kalanlar içe aktarılamadı: ${(cause as Error).message}`
+        : (cause as Error).message || 'Skilller içe aktarılamadı.');
+      if (imported > 0) onImported();
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-3 sm:p-6">
+      <div className="card flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden">
+        <div className="flex shrink-0 items-center justify-between border-b border-white/10 pb-4">
+          <div>
+            <h2 className="text-lg font-bold text-white">PDF’den skill aktar</h2>
+            <p className="mt-1 text-xs text-gray-500">Skill tablosunu kontrol et, gerekirse düzenle ve karaktere ekle.</p>
+          </div>
+          <button onClick={onClose} disabled={importing} className="text-xl text-gray-400 hover:text-white">×</button>
+        </div>
+
+        {skills.length === 0 ? (
+          <div
+            onDragOver={(event) => { event.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setIsDragging(false);
+              const file = event.dataTransfer.files[0];
+              if (file) void readFile(file);
+            }}
+            onClick={() => fileRef.current?.click()}
+            className={`mt-5 cursor-pointer rounded-xl border-2 border-dashed p-8 text-center transition-colors ${isDragging ? 'border-dragon-500 bg-dragon-500/10' : 'border-white/10 hover:border-white/30'}`}
+          >
+            <p className="mb-2 text-3xl">📄</p>
+            <p className="font-medium text-gray-200">PDF skill tablosunu buraya bırak</p>
+            <p className="mt-1 text-sm text-gray-500">veya dosya seçmek için tıkla</p>
+            <p className="mt-3 text-xs text-gray-600">Dijital metin içeren PDF’ler desteklenir.</p>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".pdf,application/pdf"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void readFile(file);
+                event.currentTarget.value = '';
+              }}
+            />
+          </div>
+        ) : (
+          <>
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <p className="text-sm text-gray-300">{skills.length} skill bulundu. İçe aktarmadan önce alanları gözden geçir.</p>
+              <button onClick={() => { setSkills([]); setError(''); }} disabled={importing} className="shrink-0 text-xs text-dragon-400 hover:text-dragon-300">Başka PDF seç</button>
+            </div>
+            <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+              {skills.map((skill, index) => (
+                <section key={`${index}-${skill.name}`} className="rounded-lg border border-white/10 bg-dungeon-900/70 p-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="text-xs text-gray-400">
+                      Skill adı
+                      <input className="input mt-1" value={skill.name} onChange={(event) => updateSkill(index, { name: event.target.value })} />
+                    </label>
+                    <label className="text-xs text-gray-400">
+                      Etki / açıklama
+                      <textarea className="input mt-1 min-h-20 resize-y" value={skill.description} onChange={(event) => updateSkill(index, { description: event.target.value })} />
+                    </label>
+                    <label className="text-xs text-gray-400">
+                      Tür
+                      <input className="input mt-1" value={skill.skillType ?? ''} onChange={(event) => updateSkill(index, { skillType: event.target.value || null })} />
+                    </label>
+                    <label className="text-xs text-gray-400">
+                      Menzil
+                      <input className="input mt-1" value={skill.range ?? ''} onChange={(event) => updateSkill(index, { range: event.target.value || null })} />
+                    </label>
+                    <label className="text-xs text-gray-400">
+                      Aksiyon
+                      <select className="input mt-1" value={skill.actionType} onChange={(event) => updateSkill(index, { actionType: event.target.value as SkillActionType })}>
+                        {Object.entries(ACTION_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                      </select>
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="text-xs text-gray-400">
+                        Mevcut kullanım
+                        <input type="number" min={0} max={skill.usesMax || undefined} className="input mt-1" value={skill.usesCurrent} onChange={(event) => updateSkill(index, { usesCurrent: Math.max(0, Number(event.target.value)) })} />
+                      </label>
+                      <label className="text-xs text-gray-400">
+                        Toplam hak (0 = sınırsız)
+                        <input type="number" min={0} className="input mt-1" value={skill.usesMax} onChange={(event) => {
+                          const usesMax = Math.max(0, Number(event.target.value));
+                          updateSkill(index, { usesMax, usesCurrent: usesMax === 0 ? 0 : Math.min(skill.usesCurrent, usesMax) });
+                        }} />
+                      </label>
+                    </div>
+                  </div>
+                </section>
+              ))}
+            </div>
+          </>
+        )}
+
+        {loadingFile && <p className="mt-3 text-sm text-gray-400">PDF okunuyor…</p>}
+        {error && <p role="alert" className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400">{error}</p>}
+        <div className="mt-4 flex shrink-0 justify-end gap-2 border-t border-white/10 pt-4">
+          <button onClick={onClose} disabled={importing} className="btn-secondary">Kapat</button>
+          {skills.length > 0 && <button onClick={() => void importSkills()} disabled={importing || skills.some((skill) => !skill.name.trim() || !skill.description.trim())} className="btn-primary">
+            {importing ? 'Ekleniyor…' : `${skills.length} skilli içe aktar`}
+          </button>}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function SkillsSection({
   sessionId,
   charId,
@@ -481,8 +661,9 @@ function SkillsSection({
   const queryClient = useQueryClient();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [modal, setModal] = useState<{ id: string | null; data: SkillInput } | null>(null);
+  const [showImport, setShowImport] = useState(false);
 
-  const { data: skills = [] } = useQuery({
+  const { data: skills = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['skills', sessionId, charId],
     queryFn: () => skillsApi.list(sessionId, charId),
   });
@@ -506,22 +687,42 @@ function SkillsSection({
     onSuccess: invalidate,
   });
 
+  const mutationError = usesMutation.error ?? deleteMutation.error;
+
   return (
     <div className="card">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="font-semibold text-white">⚔️ Skiller</h2>
         {canManage && (
-          <button
-            id="add-skill-btn"
-            onClick={() => setModal({ id: null, data: EMPTY_SKILL })}
-            className="text-xs text-dragon-400 hover:text-dragon-300 transition-colors"
-          >
-            + Ekle
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setShowImport(true)} className="text-xs text-gray-300 hover:text-white transition-colors">
+              PDF’den aktar
+            </button>
+            <button
+              id="add-skill-btn"
+              onClick={() => setModal({ id: null, data: EMPTY_SKILL })}
+              className="text-xs text-dragon-400 hover:text-dragon-300 transition-colors"
+            >
+              + Ekle
+            </button>
+          </div>
         )}
       </div>
 
-      {skills.length === 0 ? (
+      {mutationError && (
+        <p role="alert" className="mb-3 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400">
+          {mutationError.message || 'Skill işlemi tamamlanamadı.'}
+        </p>
+      )}
+
+      {isLoading ? (
+        <p className="text-sm text-gray-500">Skiller yükleniyor…</p>
+      ) : isError ? (
+        <div role="alert" className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400">
+          <p>Skiller yüklenemedi: {(error as Error).message}</p>
+          <button onClick={() => refetch()} className="mt-2 underline">Tekrar dene</button>
+        </div>
+      ) : skills.length === 0 ? (
         <p className="text-sm text-gray-600 italic">Henüz skill yok.</p>
       ) : (
         <div className="space-y-2">
@@ -624,8 +825,17 @@ function SkillsSection({
         <SkillFormModal
           initial={modal.data}
           isPending={saveMutation.isPending}
+          error={saveMutation.error?.message}
           onClose={() => setModal(null)}
           onSave={(data) => saveMutation.mutate({ id: modal.id, data })}
+        />
+      )}
+      {showImport && (
+        <SkillsImportModal
+          sessionId={sessionId}
+          charId={charId}
+          onClose={() => setShowImport(false)}
+          onImported={invalidate}
         />
       )}
     </div>
@@ -651,6 +861,10 @@ function CharacterItems({
 
   // Only items that belong to this character
   const myItems = (allItems as Item[]).filter((i) => i.ownerCharacterId === charId);
+  const itemGroups = [
+    { category: 'COMBAT' as const, label: '\u0053ava\u015f e\u015fyalar\u0131', items: myItems.filter((item) => item.category === 'COMBAT') },
+    { category: 'QUEST' as const, label: 'G\u00f6rev e\u015fyalar\u0131', items: myItems.filter((item) => item.category === 'QUEST') },
+  ];
 
   return (
     <div className="card">
@@ -661,11 +875,12 @@ function CharacterItems({
         )}
       </div>
 
-      {myItems.length === 0 ? (
-        <p className="text-sm text-gray-600 italic">Bu karaktere atanmış eşya yok.</p>
-      ) : (
-        <div className="space-y-2">
-          {myItems.map((item) => {
+      {myItems.length === 0 && <p className="text-sm text-gray-600 italic">{"Bu karaktere atanm\u0131\u015f e\u015fya yok."}</p>}
+      <div className="space-y-4">
+        {itemGroups.map((group) => <section key={group.category}>
+          <div className="mb-2 flex items-center justify-between"><h3 className="text-sm font-semibold text-gray-300">{group.label}</h3><span className="text-xs text-gray-500">{group.items.length}</span></div>
+          {group.items.length === 0 ? <p className="rounded-lg bg-dungeon-900/60 px-3 py-2 text-xs text-gray-600">{"Bu grupta e\u015fya yok."}</p> : <div className="space-y-2">
+          {group.items.map((item) => {
             const expanded = expandedId === item.id;
             return (
               <div key={item.id} className="rounded-lg bg-dungeon-900 overflow-hidden">
@@ -690,8 +905,9 @@ function CharacterItems({
               </div>
             );
           })}
-        </div>
-      )}
+          </div>}
+        </section>)}
+      </div>
     </div>
   );
 }
@@ -723,6 +939,7 @@ export default function CharacterDetailPage() {
   const [localStats, setLocalStats] = useState<StatEntry[]>([]);
   const [statsDirty, setStatsDirty] = useState(false);
   const [showEditBasic, setShowEditBasic] = useState(false);
+  const [editingGold, setEditingGold] = useState(false);
 
   // Sync localStats when character loads or refreshes
   useEffect(() => {
@@ -738,12 +955,20 @@ export default function CharacterDetailPage() {
   const canEditStats =
     isDM || (isOwner && (session?.playersCanEditStats ?? false));
 
+  const normalizedStats = localStats.map((stat) => ({
+    ...stat,
+    normalizedName: stat.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, ''),
+  }));
+  const isGoldStat = (name: string) => ['GOLD', 'ALTIN', 'GP', 'PARA'].includes(name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, ''));
+  const getQuickStat = (aliases: string[]) => normalizedStats.find((stat) => aliases.includes(stat.normalizedName));
+
   const saveStatsMutation = useMutation({
     mutationFn: () => charactersApi.upsertStats(sessionId!, charId!, localStats),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['character', sessionId, charId] });
       queryClient.invalidateQueries({ queryKey: ['characters', sessionId] });
       setStatsDirty(false);
+      setEditingGold(false);
     },
   });
 
@@ -784,16 +1009,38 @@ export default function CharacterDetailPage() {
     );
   }
 
+  const goldStat = getQuickStat(['GOLD', 'ALTIN', 'GP', 'PARA']);
+  const quickStats = [
+    { label: 'Can', stat: getQuickStat(['HP', 'CAN', 'HITPOINTS']), accent: 'text-red-300' },
+    { label: 'Zırh sınıfı', stat: getQuickStat(['AC', 'ZS', 'ARMORCLASS']), accent: 'text-sky-300' },
+    { label: 'Altın', stat: goldStat, accent: 'text-amber-300' },
+    { label: 'Ok', stat: getQuickStat(['ARROW', 'ARROWS', 'OK', 'OKLAR', 'MUNITION']), accent: 'text-emerald-300' },
+  ].filter((item) => item.stat || item.label === 'Altın');
+  const sections = [
+    { id: 'combat', label: 'Savaş & Statlar' },
+    { id: 'skills', label: 'Yetenekler' },
+    { id: 'inventory', label: 'Envanter' },
+    { id: 'journal', label: 'Özellikler & Notlar' },
+  ];
+
   return (
     <div className="min-h-screen p-4 sm:p-8">
-      <div className="mx-auto max-w-2xl space-y-6">
-        {/* Back */}
-        <button
-          onClick={() => navigate(`/sessions/${sessionId}/characters`)}
-          className="text-sm text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1"
-        >
-          ← Karakterler
-        </button>
+      <div className="mx-auto max-w-5xl space-y-5">
+        {/* Navigation */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <button
+            onClick={() => navigate(`/sessions/${sessionId}/workspace`)}
+            className="text-sm text-dragon-400 hover:text-dragon-300 transition-colors flex items-center gap-1"
+          >
+            ← {isDM ? 'DM çalışma alanı' : 'Çalışma alanım'}
+          </button>
+          <button
+            onClick={() => navigate(`/sessions/${sessionId}/characters`)}
+            className="text-sm text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1"
+          >
+            Karakterlere dön
+          </button>
+        </div>
 
         {/* Header card */}
         <div className="card">
@@ -822,8 +1069,34 @@ export default function CharacterDetailPage() {
           </div>
         </div>
 
+        {quickStats.length > 0 && <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {quickStats.map(({ label, stat, accent }) => <div key={label} className="card !p-4">
+            <p className="text-xs font-medium text-gray-500">{label}</p>
+            {label === 'Altın' ? <div className="mt-1 flex items-center gap-1.5">
+              {editingGold && canEditStats && stat ? <input autoFocus aria-label="Altın miktarı" className={`w-full min-w-0 bg-transparent text-2xl font-bold outline-none ${accent}`} value={stat.value} onChange={(event) => handleStatChange(stat.name, event.target.value)} />
+                : <p className={`text-2xl font-bold ${accent}`}>{stat?.value || '—'}</p>}
+              {canEditStats && <button type="button" aria-label="Altın miktarını düzenle" title="Altını düzenle" onClick={() => {
+                if (!stat) handleAddStat({ name: 'GOLD', value: '0' });
+                setEditingGold(true);
+              }} className="shrink-0 text-sm text-amber-200/70 hover:text-amber-100">✏️</button>}
+              {editingGold && canEditStats && statsDirty && <button onClick={() => saveStatsMutation.mutate()} disabled={saveStatsMutation.isPending} className="shrink-0 text-xs text-amber-200 hover:text-amber-100 disabled:opacity-40">
+                {saveStatsMutation.isPending ? '…' : 'Kaydet'}
+              </button>}
+            </div> : <p className={`mt-1 text-2xl font-bold ${accent}`}>{stat?.value || '—'}</p>}
+          </div>)}
+        </div>}
+
+        <nav aria-label="Sayfa içi hızlı geçiş" className="sticky top-0 z-20 -mx-4 flex gap-2 overflow-x-auto border-y border-white/10 bg-dungeon-950/95 px-4 py-2 backdrop-blur sm:-mx-8 sm:px-8">
+          {sections.map((section) => <a key={section.id} href={`#${section.id}`}
+            className="shrink-0 rounded-lg px-3 py-2 text-sm text-gray-400 transition-colors hover:bg-white/5 hover:text-white">
+            {section.label}
+          </a>)}
+        </nav>
+
+        <div className="grid items-start gap-5 lg:grid-cols-2">
+        <div className="space-y-5">
         {/* Stats card */}
-        <div className="card">
+        <section id="combat" className="card scroll-mt-20">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="font-semibold text-white">📊 Statlar</h2>
             {canEditStats && statsDirty && (
@@ -845,7 +1118,7 @@ export default function CharacterDetailPage() {
           <div className="space-y-2">
             {(() => {
               const ORDER = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA', 'HP', 'AC'];
-              const sorted = [...localStats].sort((a, b) => {
+              const sorted = localStats.filter((stat) => !isGoldStat(stat.name)).sort((a, b) => {
                 const ai = ORDER.indexOf(a.name.toUpperCase());
                 const bi = ORDER.indexOf(b.name.toUpperCase());
                 // Known stats come first in defined order; unknowns go to the end alphabetically
@@ -932,28 +1205,38 @@ export default function CharacterDetailPage() {
               ⚠️ Kaydedilmemiş değişiklikler var — yukarıdaki "Kaydet" butonuna tıkla.
             </p>
           )}
-        </div>
+        </section>
 
         {/* Skills */}
+        <section id="skills" className="scroll-mt-20">
         <SkillsSection
           sessionId={sessionId!}
           charId={charId!}
           canManage={canEdit}
         />
+        </section>
+        </div>
 
         {/* Character Items */}
+        <div className="space-y-5">
+        <section id="inventory" className="scroll-mt-20">
         <CharacterItems
           sessionId={sessionId!}
           charId={charId!}
           isDM={isDM}
         />
+        </section>
 
         {/* Traits & Notes */}
+        <section id="journal" className="scroll-mt-20">
         <TraitsSection
           sessionId={sessionId!}
           charId={charId!}
           canManage={canEdit}
         />
+        </section>
+        </div>
+        </div>
       </div>
 
       {showEditBasic && character && (

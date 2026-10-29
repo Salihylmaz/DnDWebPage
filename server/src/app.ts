@@ -11,6 +11,10 @@ import sessionsRouter from './routes/sessions';
 import itemsRouter from './routes/items';
 import charactersRouter from './routes/characters';
 import traitsRouter from './routes/traits';
+import skillsRouter from './routes/skills';
+import creaturesRouter from './routes/creatures';
+import combatRouter from './routes/combat';
+import logbookRouter from './routes/logbook';
 
 export function createApp() {
   const app = express();
@@ -36,6 +40,10 @@ export function createApp() {
   app.use('/api/sessions', itemsRouter);       // Step 4 ✓
   app.use('/api/sessions', charactersRouter);  // Step 5 ✓
   app.use('/api/sessions', traitsRouter);      // Step 7 ✓
+  app.use('/api/sessions', skillsRouter);
+  app.use('/api/sessions', creaturesRouter);
+  app.use('/api/sessions', combatRouter);
+  app.use('/api/sessions', logbookRouter);
 
   return app;
 }
